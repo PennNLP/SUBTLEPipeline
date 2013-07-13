@@ -39,6 +39,7 @@ public class StanfordPOSTaggerStreamInterface {
 		}
 		// Create the tagger
 		MaxentTagger tagger = new MaxentTagger(args[0]);
+		String divider = "_";
 
 		// Tag from standard input
 		BufferedReader stdin = new BufferedReader(new InputStreamReader(System.in));
@@ -51,12 +52,8 @@ public class StanfordPOSTaggerStreamInterface {
 					Iterator<TaggedWord> wordIter = tokens.iterator();
 					while (wordIter.hasNext()) {
 						TaggedWord word = wordIter.next();
-						if (wordIter.hasNext()) {
-							System.out.print(word + " ");
-						}
-						else {
-							System.out.print(word);
-						}
+						String wordText = word.toString(divider);
+						System.out.print(wordText + (wordIter.hasNext() ? " " : ""));
 					}
 					// Newline after each sentence
 					System.out.print("\n");
