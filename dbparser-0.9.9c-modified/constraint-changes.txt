@@ -1,0 +1,119 @@
+
+
+There are a few changes I had to make to Decoder to get the
+constraint stuff to work.  I also had to make one change to
+Parser:
+
+-------------------------------------------------------------
+1. I modified Parser.getConstraintsFromTree to also prune and
+raisePunctuation before getting the constraints, in addition
+to convertUnknownWords.  We talked about this several
+months ago.  It has to be pruned before getting the consraints,
+since otherwise the indices on the constraints will not 
+correspond to what thee parser is actually doing.  
+I think for similar reasons I did raise Punctuation.
+
+
+Related to this, out of general paranoia, I put this code in
+Decoder.parse, after the call to initialize:
+
+    /* SK
+       This is a check
+       to make sure that the constraints are the expected size
+    */
+
+    if (constraints!=null) {
+	if (constraints instanceof PartialTreeConstraint2Set) {
+	    PartialTreeConstraint2Set tmpConstraint=(PartialTreeConstraint2Set)constraints;
+	    PartialTreeConstraint2 root = (PartialTreeConstraint2) tmpConstraint.root();
+	    if (root.start()!=0 ||
+		root.end()!=sentence.length()-1) {
+		System.out.println("WARNING unexpected constraint " +
+				   "constraints="+constraints+
+				   "\n root = " + root + 
+				   "\n sentencelength = " + sentence.length());
+	    } else {
+		System.out.println("constraint as expected " +
+				   "constraints="+constraints+
+				   "\n root = " + root + 
+				   "\n sentencelength = " + sentence.length());		
+	    }
+
+	}
+    }
+This can obviously be taken out.
+-------------------------------------------------------------
+There are various changes to Decoder I had to make for special interaction with
+PartialTreeConstraint2. I'm not sure how you want to handle these.  This is
+probably the biggest question to resolve.  It's of course very clumsy
+and inelegant to have such special handling in there, instead of working
+through the Constraint interface.  
+
+
+-------------------------------------------------------------
+2. addUnaries 
+-------------------------------------------------------------
+   calls getParent passing in current item.  This is how it gets around that
+problem that originally existed of the fullySatisfied and satisfied
+variables colliding across different parse trees.
+
+
+/* SK modified  */
+if (itemConstraint instanceof PartialTreeConstraint2) {
+	  headChildParent = ((PartialTreeConstraint2)itemConstraint).getParent(item);
+} else {
+	  headChildParent = item.getConstraint().getParent();
+}
+
+Maybe change Constraints.java to have getParent(Item item), and for
+all the other constraints systems have that internally call getParent() ?
+
+-------------------------------------------------------------
+3. addTopUnaries 
+-------------------------------------------------------------
+Basically same thing as with addUnaries
+
+if (itemConstraint instanceof PartialTreeConstraint2) {
+    parent = ((PartialTreeConstraint2)itemConstraint).getParent(item);
+} else {
+    parent = item.getConstraint().getParent();
+}
+
+
+-------------------------------------------------------------
+4. joinItems
+-------------------------------------------------------------
+
+The call to isViolatedByChild requires no special handling for
+PartialTreeConstraint2, but after forming newItem and assigning
+it a constraint, it calls:
+
+if (newItem.getConstraint() instanceof PartialTreeConstraint2) {
+    PartialTreeConstraint2 newItemConstraint=(PartialTreeConstraint2)(newItem.getConstraint());
+    if (newItemConstraint.isViolatedByPartialConstituent(newItem)) {
+	if (debugConstraints)
+	    System.out.println("assigned partially-satisfied constraint " +
+			       " joinItems " + 
+			       " violates constraint within " + 
+			       modificand.getConstraint() + " to " + newItem);	      
+	return;
+    } else {
+	if (debugConstraints && modificand.start()==4) 
+	    System.out.println("assigned partially-satisfied constraint " +
+			       " joinItems " + 
+				       " does not constraint within " + 
+				       modificand.getConstraint() + " to " + newItem);	      
+
+(I was debugging some constituent starting at index 4, the only reason
+for that strange condition in the second part.)
+
+What this is doing is checking if the current item has all constraints 
+satisfied within it that it should. As mentioned in the paper, this can't
+wait until adding the stop probabilities.  
+
+It is possible to wrap this into isViolatedByChild, but that would
+require passing in the modifier and modificand and then checking stuff,
+and it seemed simpler to just do the checking on the new item. Perhaps this
+could be made into a new function in the Constraints interface.  
+
+

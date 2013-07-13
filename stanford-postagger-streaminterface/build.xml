@@ -1,0 +1,51 @@
+<project name="stanford-postagger-streaminterface" default="dist" basedir=".">
+    <description>
+        Build file for the stream interface to the Stanford POS Tagger.
+    </description>
+  <!-- set global properties for this build -->
+  <property name="src" location="src"/>
+  <property name="build" location="build"/>
+  <property name="output"  location="stanford-postagger-streaminterface.jar"/>
+
+  <target name="init">
+    <!-- Create the build directory structure used by compile -->
+    <mkdir dir="${build}"/>
+  </target>
+
+  <target name="compile" depends="init"
+        description="compile the source " >
+    <!-- Compile the java code from ${src} into ${build} -->
+    <javac srcdir="${src}" destdir="${build}" includeantruntime="false">
+      <classpath>
+	<pathelement path="${classpath}"/>
+	<fileset dir="lib">
+	  <include name="*.jar"/>
+	</fileset>
+      </classpath>
+    </javac>
+  </target>
+
+  <target name="dist" depends="compile"
+        description="generate the distribution" >
+    <!-- Put everything in ${build} into the .jar file -->
+    <jar jarfile="${output}" basedir="${build}">
+        <manifest>
+            <attribute name="Main-Class" value="edu.upenn.cis.subtle.StanfordPOSTaggerStreamInterface" />
+            <attribute name="Class-Path" value="lib/stanford-postagger.jar" />
+        </manifest>
+    </jar>
+  </target>
+
+  <target name="clean"
+        description="clean up" >
+    <!-- Delete the ${build} directory and the jar -->
+    <delete dir="${build}"/>
+    <delete file="${output}"/>
+  </target>
+
+  <target name="cleandist" depends="dist"
+        description="make dist and delete the build folder" >
+    <!-- Delete the ${build} directory only -->
+    <delete dir="${build}"/>
+  </target>
+</project>

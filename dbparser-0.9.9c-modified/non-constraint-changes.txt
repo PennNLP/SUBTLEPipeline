@@ -1,0 +1,198 @@
+
+This file describes changes that are not related to the constraint code.
+
+These are all changes that I made to the code in my copy of 
+dbparser-0.9.9c.  Of course, these could all have been done in some way
+by extending classes.  That is how indeed I've made almost all my
+changes for various things related to Arabic and the historical stuff,
+but those are proper extensions and don't affect anything else and
+so I'm not mentioning them here.  Here are items that I did not
+do by extending classes because:
+
+(1) they're bugs and so should be changed in the core code.
+
+or
+
+(2) would have required copying a fairly long function just to change a 
+single line or two in the new version (e.g., the changes to Decoder.parse) and 
+so what is arguably needed is instead a hook in the code to allow a smaller
+function to override for a specific need.  
+
+====================================================================
+1. The handling of substituteWordsForClosedClassTags had some problems, which
+caused me to change/modify Decoder, DecoderServer, CachingDecoderServer
+
+
+   A. posToExampleWordmap was not initialized, so I added
+      posToExampleWordMap= new HashMap();
+     to the Decoder constructor
+
+   B. Decoder.getExampleWordForTag: This is kind of interesting.  As
+written, the code will get the "first known word that was observed with the
+specified tag." However, it is possible that the example word will
+have the same problem as the original word  - that is, it would
+have a logPrior<=logOfZero, which wouldn't accomplish anything.  So 
+I added a check to see if a word is unknown before adding it to 
+posToExampleWordMap.
+
+   C. Corresponding to the previous, I added a function isUnknownWord to 
+DecoderServer, which is where it seemed to belong, similar to 
+convertUnknownWord (which in turn could call isUnknownWord as part of its 
+processing, although I didn't do that.)  This caused me to also add 
+isUnknownWord to CachingDecoderServer
+
+   D. I added a check in Decoder.seedChart that the returned exampleWord!=null,
+which  is possible.
+
+   E. For some reason I don't even remember, I took out the check for
+wordIsUnknown from the condition in Decoder for calling getExampleForTag.
+I'm not sure it matters much either way.  I think I was seeing cases where
+a word had never been (or very rarely) seen with some tag, but was not 
+unknown, but the tag was correct and we wanted it to pick out some word
+with that tag.
+
+   F. I also added features=null before 
+    headWord = getCanonicalWord(lookupWord.set(exampleWord, tag, features));
+in the handling of the example word
+
+     This was done a long time ago and to be honest I don't remember exactly
+why (and of course I didn't write it down), but I know there was a real reason.
+I think w/o doing that it was using features from the earlier word, so it was
+setting the headWord with a potentially +UNKNOWN+ feature even if the word
+wasn't unknown.
+====================================================================
+2. Parsing for Tony's historical stuff includes lots of stuff like
+((<text> (CODE)))
+a part of the input 
+or ((CODE <text>)), depending on the input format used.
+
+This is obviously not stuff to parse, but it's sort of interspersed
+among the sentences to parse, and it can't be lost. It could of course
+be separated out before creating the file for parsing, and then put it
+back in later, but that's kind of cumbersome. 
+
+If included as part of the input, these sentences get preprocessed
+into nonexistence - that is, the single preterminal is pruned.  so 
+I modified the code in parse for returning null to instead restore
+the "sentence" and return that.  
+
+that is, I changed this:
+
+    if (sentLen == 0) {         // preprocessing could have removed all words!
+      chart.postParseCleanup(); // get rid of seed items from initialize()
+      sentence.clear();
+      sentence.addAll(originalSentence); // restore original sentence
+      // return null;
+      /* SK added */
+      System.out.println("preprocessing removed entire sentence " + sentence);
+      Sexp tree=new SexpList();
+      restoreOriginalWords(tree, 0);
+      //    System.out.println("after restore original words " + tree);
+      if (restorePrunedWords) {
+	  restorePrunedWords(tree);
+	  //System.out.println("after restore pruned words"+tree);
+      }      
+      if (tree.list().length()>1) {
+	  System.out.println("WARNING:restored removed setnence with length="+
+tree.list().length());
+      }
+      return tree;
+
+    }
+
+Here I could have overriden the entire function and used a different
+Decoder, but that seemed really extreme.  Perhaps there could be 
+setting here for determining what should be returned in this case.
+
+(I realize that by not returning null, the .parsed.log file will have
+this as "true", but that didn't really bother me.)
+
+Similarly, I modified Parser.parse to return sent instead of null if
+sent is bad format, for the same reason as Decoder returns
+sent instead of null. The reason I had to include it both
+in Parser.parse and Decoder.parse has to do with whether the
+input is in ((CODE <text>)) or ((<text> (CODE))) format.  If the
+latter, then it falls under sentContainsWordsAndTags and so 
+gets passed to Decoder.parse and then falls under the 
+change to Decoder and so is returned instead of null
+
+If the former, it doesn't match any of the conditions in 
+Parser.parse, and so I modified it to return null in that case.
+Again, perhaps this can be based on a setting, perhaps the
+same one used for the change in Decoder.parse
+
+
+  public Sexp parse(SexpList sent) throws RemoteException {
+    if (sentContainsWordsAndTags(sent))
+      return decoder.parse(getWords(sent), getTagLists(sent));
+    else if (sent.isAllSymbols())
+      return decoder.parse(sent);
+    else if (Language.training.isValidTree(sent)) {
+      return decoder.parse(getWordsFromTree(sent),
+			   getTagListsFromTree(sent),
+			   getConstraintsFromTree(sent));
+    }
+    else {
+      err.println(className + ": error: sentence \"" + sent +
+			 "\" has a bad format:\n\tmust either be all symbols " +
+			 "or a list of lists of the form (<word> (<tag>*))");
+      //      return null;
+      /* SK modified
+	 This is analgous to change in Decoder to return bogus sentence
+      */
+      return sent;
+    }
+  }
+
+
+   
+====================================================================
+3. There were some really degenerate sentences in which the
+restoring of pruned words interfered with the removal of baseNPs.
+For example, it produced
+
+(NP (NPB (NN Ad) (NNS Notes)))
+and then restored the pruned words to get:
+(NP (NPB (NN Ad) (NNS Notes)) (: ...) (. .))
+
+and then it wouldn't prune NPB because it was no longer a unary child!
+So I modified postProcess to rstore prunedWords after doing the
+Language.training.postProcess.
+
+I'm not sure this should be done in general, though.  What do you think?
+Of course, I could have overriden postProcess as well.
+
+====================================================================
+4. change to removeOnlyChildBaseNPs in AbstractTraining
+
+Wow, this is weird. There were some cases in which the parser was
+producing sentences with (NP (NP ...)) and I looked at the input
+before postprocessing and it was actually (NP (NPB ..)), but the
+NPB wasn't getting removed.  e.g.:
+
+after removeOnlyChildBaseNPs(S (S-A (NP-A (`` ``) (PRP We)) (VP (VBP view) (NP-A (PRN (-LRB- -LCB-) (NP (NPB (NNP Friday) (POS 's))) (-RRB- -RCB-)) (NN market) (NN decline)) (PP (IN as) (SG-A (VP (VBG offering) (NP-A (PRP us)) (NP-A (DT a) (NN buying) (NN opportunity))))) (PP (IN as) (NP-A (JJ long-term) (NNS investors))))) (, ,) (NP-A (NPB ('' '') (DT a) (NN recording)) (PP (IN at) (NP-A (NNP Gabelli) (CC &) (NNP Co.) (NNS funds)))) (VP (VBD said) (PP (IN over) (NP-A (DT the) (NN weekend)))) (. .))
+
+Note that this has:
+
+(NP (NPB (NNP Friday) (POS 's)))
+
+which should not happen.
+
+
+The reason is that is was under another NPB:
+(NP-A (NPB (PRN (-LRB- -LCB-) 
+                (NP (NPB (NNP Friday) (POS 's)))
+                (-RRB- -RCB-))
+
+and once the first NPB got deleted, the code wouldn't descend further into it.
+So I just modified removeOnlyChildBaseNPs to comment out
+currChildRemoved=true, so that it would descend into a (formerly) NPB
+child.
+
+Now, I realize that this is completely bizarre, since there should
+never be a NP inside a NPB (of course!)  I can only imagine that
+using the relaxation stuff allowed some strange possibilities to happen.
+But however it happened, it didn't seem to hurt anything to modify
+removeOnlyChildBaseNPs this way.
+
+

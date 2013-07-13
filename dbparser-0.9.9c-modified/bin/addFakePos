@@ -1,0 +1,3 @@
+#!/bin/tcsh -f
+
+exec java -Xms200m -Xmx200m danbikel.parser.util.AddFakePos $argv

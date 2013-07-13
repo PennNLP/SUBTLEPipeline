@@ -1,0 +1,22 @@
+(
+  (SBARQ
+    (WHADVP (WRB Where))
+    (SQ (VBP are)
+      (NP (PRP you)))
+    (. ?)))
+(
+  (S
+    (VP (VB Go)
+      (PP (TO to)
+        (NP (DT the) (NN hallway))))
+    (. .)))
+(
+  (S
+    (NP (PRP I))
+    (VP (VBP want)
+      (S
+        (VP (TO to)
+          (VP (VB go)
+            (PP (TO to)
+              (NP (DT the) (NN hallway)))))))
+    (. .)))

@@ -1,0 +1,7 @@
+#!/bin/tcsh -f
+
+set JAVA_HOME=/usr/java/jdk1.5.0
+
+#unsetenv CLASSPATH
+$JAVA_HOME/bin/rmiregistry -J-Xmx256m &
+
