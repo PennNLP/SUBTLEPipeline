@@ -1,0 +1,6 @@
+.DS_Store
+*~
+*.class
+# Uncompressed dbparser models
+*.obj
+build/
